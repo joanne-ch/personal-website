@@ -1,0 +1,17 @@
+{
+    "Personal Website": {
+      "github_link": "",
+      "website_link": "",
+      "description": "Developed a dynamic web application with a deployment using <strong>S3</strong> and <strong>CloudFront</strong>.<br><br>Integrated <strong>serverless functions</strong> with <strong>AWS Lambda</strong> and <strong>API Gateway</strong>, utilized <strong>DynamoDB</strong> for backend storage. <br><br>Implemented a <strong>CI/CD pipeline </strong> for automated deployment, including backend testing for reliability and stability, through <strong>GitHub Actions</strong><br><br>Employed <strong>AWS SAM (Serverless Application Model)</strong> for <strong>Infrastructure as Code (IaC)</strong>.",
+      "tech_stack": [
+        "AWS S3",
+        "AWS CloudFront",
+        "AWS Lambda",
+        "AWS API Gateway",
+        "DynamoDB",
+        "AWS SAM (IaC)",
+        "CI/CD"
+      ]
+    }
+  }
+  

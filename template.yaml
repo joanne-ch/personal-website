@@ -1,0 +1,193 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  cloud-resume
+
+  Sample SAM Template for cloud-resume
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 3
+    MemorySize: 128
+
+    Tracing: Active
+    # You can add LoggingConfig parameters such as the Logformat, Log Group, and SystemLogLevel or ApplicationLogLevel. Learn more here https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-resource-function.html#sam-function-loggingconfig.
+    LoggingConfig:
+      LogFormat: JSON
+  Api:
+    TracingEnabled: true
+Resources:
+  MyDynamoDBTable:
+    Type: 'AWS::DynamoDB::Table'
+    Properties:
+      TableName: 'cloud-resume'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: 'Id'
+          AttributeType: 'S'
+      KeySchema:
+        - AttributeName: 'Id'
+          KeyType: 'HASH'
+
+  MyWebsite:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: my-cloud-resume-unique-identifier
+      WebsiteConfiguration:
+        IndexDocument: index.html
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+        
+  MyBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties: 
+      Bucket: !Ref MyWebsite 
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: PublicReadGetObject
+            Effect: Allow
+            Principal: "*"
+            Action: 
+              - s3:GetObject
+            Resource: !Join
+              - ""
+              - - "arn:aws:s3:::"
+                - !Ref MyWebsite
+                - /*
+
+  MyUserPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: MyUserPolicy
+      Users:
+        - joannec
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - s3:*
+              - apigateway:*
+              - cloudfront:*
+              - route53:*
+              - dynamodb:*
+            Resource: 
+              - "*"
+              - arn:aws:s3:::my-cloud-resume-unique-identifier
+              - arn:aws:apigateway:ap-southeast-1::/restapis
+              - arn:aws:apigateway:ap-southeast-1::/restapis/*
+  
+  MyDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        DefaultCacheBehavior:
+          ViewerProtocolPolicy: allow-all
+          TargetOriginId: !GetAtt MyWebsite.DomainName
+          DefaultTTL: 0
+          MinTTL: 0
+          MaxTTL: 0
+          ForwardedValues:
+            QueryString: false
+          
+        Origins:
+          - DomainName: !GetAtt MyWebsite.DomainName
+            Id: !GetAtt MyWebsite.DomainName
+            CustomOriginConfig:
+              OriginProtocolPolicy: match-viewer
+        Aliases:
+          - "joannech.com"
+        ViewerCertificate:
+          AcmCertificateArn: "arn:aws:acm:us-east-1:471112881349:certificate/c21b12ad-6209-46cd-8000-396cb54a1293"
+          SslSupportMethod: "sni-only"
+        Enabled: true
+        DefaultRootObject: index.html
+
+  MyDNSRecord:
+    Type: "AWS::Route53::RecordSetGroup"
+    Properties:
+      HostedZoneId: Z0351956Y9DFLT1K0NWZ
+      RecordSets:
+        - Name: joannech.com
+          Type: A
+          AliasTarget:
+            HostedZoneId: Z2FDTNDATAQYW2
+            DNSName: !GetAtt MyDistribution.DomainName
+
+  VisitorPutFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: cloud-resume
+      CodeUri: backend
+      Handler: app.put_visitor_count
+      Runtime: python3.9
+      Architectures:
+      - x86_64
+      Events:
+        HelloWorld:
+          Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+          Properties:
+            Path: /put_visitor_count
+            Method: post
+
+  VisitorGetFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: cloud-resume
+      CodeUri: backend
+      Handler: app.get_visitor_count
+      Runtime: python3.9
+      Architectures:
+      - x86_64
+      Events:
+        HelloWorld:
+          Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+          Properties:
+            Path: /get_visitor_count
+            Method: get
+
+  ApplicationResourceGroup:
+    Type: AWS::ResourceGroups::Group
+    Properties:
+      Name:
+        Fn::Sub: ApplicationInsights-SAM-${AWS::StackName}
+      ResourceQuery:
+        Type: CLOUDFORMATION_STACK_1_0
+  ApplicationInsightsMonitoring:
+    Type: AWS::ApplicationInsights::Application
+    Properties:
+      ResourceGroupName:
+        Ref: ApplicationResourceGroup
+      AutoConfigurationEnabled: 'true'
+
+Outputs:
+  VisitorPutApi:
+    Description: "API Gateway endpoint URL for PUT Visitor Count"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/put_visitor_count"
+    Export:
+      Name: VisitorPutApi
+  
+  # Lambda Function ARN for VisitorPutFunction
+  VisitorPutFunctionArn:
+    Description: Put Visitor Count Lambda Function ARN
+    Value: !GetAtt VisitorPutFunction.Arn
+
+  VisitorGetApi:
+    Description: "API Gateway endpoint URL for GET Visitor Count"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/get_visitor_count"
+    Export:
+      Name: VisitorGetApi
+  
+  # Lambda Function ARN for VisitorGetFunction
+  VisitorPutFunctionArn:
+    Description: Put Visitor Count Lambda Function ARN
+    Value: !GetAtt VisitorGetFunction.Arn
